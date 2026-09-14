@@ -32,6 +32,7 @@
 | Pinia | 4.x | 管理用户信息、权限、全局配置 |
 | Vue Router | 4.x | 全局前置守卫统一做登录校验、权限校验 |
 | Vite | 8.x | 配置路径别名、自动导入、接口代理 |
+| Node.js | 24 LTS | 本地与 Docker 构建统一版本（Vite 8 要求 ≥20.19 / ≥22.12） |
 | ESLint + Prettier | 10.x / 3.x | 统一代码风格与静态检查（CI lint 步骤）；配置随仓库提交 |
 
 ### 2.2 后端
@@ -188,7 +189,7 @@ public class ApiResult<T>
 
 ### 4.5 控制器与依赖注入
 
-- 路由：`[Route("api/v1/[controller]")]`，并启用 `AddRouting(o => o.LowercaseUrls = true)` 统一小写 URL
+- 路由：`[Route("/api/v1/[controller]")]`，并启用 `AddRouting(o => o.LowercaseUrls = true)` 统一小写 URL
 - RESTful 风格：GET 查询 / POST 新增 / PUT 修改 / DELETE 删除
 - 入参使用 DTO，禁止直接使用 Entity 作为接口参数
 - 分页参数继承 `PageQuery` 基类（PageIndex、PageSize、SortField、SortOrder）
@@ -266,12 +267,12 @@ interface ApiResult<T> {
 | 错误码 | 含义 | 前端处理 |
 | --- | --- | --- |
 | 0 | 成功 | 正常处理数据 |
-| 400 | 参数校验失败 | 展示错误信息 |
+| 400 | 参数绑定/框架级校验失败（模型绑定、DataAnnotations） | 展示错误信息 |
 | 401 | 未登录 / Token 失效 | 走无感刷新，失败则跳转登录 |
 | 403 | 无权限 | 提示无权限 |
 | 409 | 幂等冲突（重复提交） | 提示"请勿重复提交" |
 | 500 | 系统内部错误 | 通用错误提示 |
-| ≥1000 | 业务异常 | 展示后端具体错误信息 |
+| ≥1000 | 业务异常（含业务层校验失败，如 1002） | 展示后端具体错误信息 |
 
 > **说明**：表中数值为响应体 `ApiResult.code` 的取值。HTTP 状态码与 0–500 段保持一致（401 未登录、403 无权限、409 冲突等）；业务异常（≥1000）HTTP 返回 200，前端依据 `code` 区分处理。
 >
@@ -286,7 +287,7 @@ interface ApiResult<T> {
 - 幂等：POST 提交类接口携带 `Idempotency-Key` 请求头（UUID），后端 Redis 去重 + 数据库唯一索引兜底，重复请求返回 409。实现细则：
   - 前端生成时机：表单初始化时生成 UUID 随首次提交发送，重试沿用同一 key，新表单重新生成
   - 后端去重：Redis `SET NX` 写入 `{项目}:idempotency:{key}`，TTL 24 小时（按业务可调）；已存在即视为重复提交，返回 409
-  - 并发兜底：Redis 穿透时由数据库唯一索引兜底，唯一约束冲突同样返回 409
+  - 并发兜底：Redis 不可用或 SET NX 失败时由数据库唯一索引兜底，唯一约束冲突同样返回 409
 
 ---
 
@@ -295,7 +296,7 @@ interface ApiResult<T> {
 ### 7.1 后端
 
 - 框架：xUnit + FluentAssertions + NSubstitute
-- 单元测试：Service 层覆盖核心业务分支，**行覆盖率 ≥ 60%**（CI 强制卡点）
+- 单元测试：Service 层覆盖核心业务分支，**行覆盖率 ≥ 60%**（Coverlet 统计，CI 强制卡点）
 - 集成测试：使用 Testcontainers 起真实 MySQL 容器，覆盖 Repository 与关键 API 链路（**需本地 Docker 运行**；环境缺失时反馈并等待处理，禁止跳过集成测试交差）
 - 测试命名：`方法名_场景_期望结果`（如 `CreateUserAsync_EmailDuplicated_ThrowsBusinessException`）
 - 测试代码与生产代码同 MR 提交，**新增/修改业务逻辑必须附带测试**
@@ -364,7 +365,7 @@ interface ApiResult<T> {
 ## 九、缓存规范
 
 - 分布式缓存：Redis（StackExchange.Redis）；进程内缓存：`IMemoryCache`
-- 模式：cache-aside —— 读：先缓存后数据库并回填；写：先更新数据库，再失效缓存
+- 模式：cache-aside —— 读：先查缓存，未命中再查数据库并回填缓存；写：先更新数据库，再失效缓存
 - Key 命名：`{项目}:{模块}:{实体}:{id}`，如 `admin:user:info:1001`
 - 字典、组织架构、权限等低频变更数据：本地缓存 TTL 10 分钟 + 更新时主动失效
 - 热点查询：Redis，TTL 按业务定（默认 5 分钟）
@@ -432,7 +433,7 @@ lint → build → test（单测+集成）→ 覆盖率卡点 → 镜像构建 �
 
 ### 12.3 Docker 构建
 
-- 前端：多阶段构建（node 构建 → nginx:alpine 托管），最终镜像 ≤ 50MB，Nginx 同时处理静态资源与 `/api` 反代
+- 前端：多阶段构建（node:24-alpine 构建 → nginx:alpine 托管），最终镜像 ≤ 50MB，Nginx 同时处理静态资源与 `/api` 反代
 - 后端：多阶段构建（sdk 构建 → aspnet 镜像运行，如 `mcr.microsoft.com/dotnet/aspnet:10.0`），端口 5000
 - **禁止镜像内硬编码连接串、密钥**，统一环境变量注入
 
@@ -477,7 +478,7 @@ lint → build → test（单测+集成）→ 覆盖率卡点 → 镜像构建 �
 
 | 指标 | 预算 | 校验方式 |
 | --- | --- | --- |
-| 前端主 chunk（gzip） | ≤ 500KB | Vite Bundle Analyzer，CI 卡点 |
+| 前端主 chunk（gzip） | ≤ 500KB | vite-bundle-visualizer，CI 卡点 |
 | 首屏 LCP | ≤ 2.5s | Lighthouse / 线上监控 |
 | API P95 响应 | ≤ 500ms（不含导出类） | Serilog 耗时统计 + 监控告警 |
 | 路由级代码分割 | 必须 | 所有 views 路由懒加载 |
