@@ -28,7 +28,10 @@
 - EF Core：只读查询 `AsNoTracking()`；列表 `Select()` 投影 DTO；显式 `Include()` 禁止懒加载；字符串字段显式 `HasMaxLength()`。
 - 入参一律 DTO；构造函数注入；异步方法后缀 `Async`。
 - 表结构变更必须走 EF 迁移；重要业务表（用户/角色/权限/订单/审批等核心实体）逻辑删除用 `IsDeleted`，禁止物理删除；日志表/会话表/临时表允许物理删除。
+- 业务表必含 `Id`（int 自增，审计日志等高速增长表用 bigint）、`CreateTime`、`UpdateTime`。
 - 禁止 SQL 拼接、禁止明文密码（BCrypt）、禁止日志输出密码/Token/密钥；CORS 白名单显式配置，禁止 `AllowAnyOrigin`。
+- 禁止 `v-html` 渲染服务端/用户输入；富文本必须先过白名单净化库（DOMPurify）。
+- 敏感字段（手机号/邮箱/身份证）后端按权限脱敏后返回，前端只负责展示。
 - 缓存必须设过期时间，禁止永久 key、禁止缓存敏感信息明文。
 - 所有 views 路由懒加载；列表必须分页，禁止一次性全量查询。
 - 必须配置前端错误边界（`app.config.errorHandler` + `onErrorCaptured` 降级 UI），禁止未捕获异常导致白屏。

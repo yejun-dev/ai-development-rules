@@ -565,6 +565,6 @@ lint → build → test（单测+集成）→ 覆盖率卡点 → 镜像构建�
 
 - **允许（免确认）**：日常验证命令（build / lint / format / test、本地启动）与只读 git 命令
 - **确认（弹窗询问）**：新增/卸载依赖、EF 迁移、shadcn 组件、git 写操作、Docker、删除文件、外网访问
-- **拒绝（不可执行）**：修改 `components/ui` 源码、读取 `.env` 全家族密钥文件（`.env` / `.env.local` / `.env.*.local`，含子目录递归）、force push、`rm -rf`、`npm publish`
+- **拒绝（不可执行）**：修改 `components/ui` 源码、读取 `.env` 全家族密钥文件（`.env` / `.env.local` / `.env.*.local`，含子目录递归）、force push、`rm -rf`、`npm publish` / `dotnet nuget push`
 
 规则说明与按仓库调整方法见 `.claude/README.md`；个人差异写在 `.claude/settings.local.json`（加入 .gitignore，不随仓库提交）。
