@@ -27,7 +27,7 @@
 | Tailwind CSS | 4.x | 优先原子类，禁止新增独立 CSS 文件；主题配置用 CSS `@theme` |
 | shadcn-vue | 最新稳定版 | 组件源码位于 `src/components/ui`，**禁止直接修改源码** |
 | TanStack Vue Table | 8.x | 所有列表页必须使用，禁止手写原生表格逻辑 |
-| Zod + @vue-zod/form | 最新版 | 所有表单必须定义 Schema，与后端 DTO 校验规则对齐 |
+| Zod + vee-validate（@vee-validate/zod） | 最新版 | 所有表单必须定义 Schema，与后端 DTO 校验规则对齐 |
 | Axios | 1.x | 必须使用全局封装实例，禁止直接调用原生 axios |
 | Pinia | 4.x | 管理用户信息、权限、全局配置 |
 | Vue Router | 4.x | 全局前置守卫统一做登录校验、权限校验 |
@@ -41,14 +41,14 @@
 | --- | --- | --- |
 | ASP.NET Core Web API | .NET 10.0 LTS | 使用 `[ApiController]`，顶层路由统一前缀 |
 | EF Core | 10.0 | Code First，迁移管理表结构 |
-| Pomelo.EntityFrameworkCore.MySql | 9.0 | 与 EF Core 10 配对使用；主版本不完全对齐，需项目 NoWarn 抑制 NuGet 警告（实测可用）；禁止随意跨大版本混用 |
+| Pomelo.EntityFrameworkCore.MySql | 9.0（过渡方案） | 官方尚无 EF Core 10 适配版（最新 9.0.0 仅支持 EF Core 9），实际项目采用 9.0 + EF Core 10 组合，需项目 NoWarn 抑制 NuGet 警告（实测可用）；待官方适配发布后升级，或改用 Microting 分支（10.x，API 兼容仅换命名空间）；禁止随意跨大版本混用 |
 | JWT Bearer | 框架内置 | 接口默认需要认证，公开接口显式标记 `[AllowAnonymous]` |
 | FluentValidation | 最新版 | 后端 DTO 入参校验（见 8.2） |
 | Serilog | 最新版 | 结构化日志：请求链路、异常堆栈、业务日志 |
 | StackExchange.Redis | 最新版 | 分布式缓存（见第九章） |
 | Asp.Versioning | 最新版 | URL 版本控制（见 6.1） |
 
-测试类库（xUnit / FluentAssertions / NSubstitute / Testcontainers）与限流组件（AspNetCoreRateLimit）分别见 7.1、8.6。
+测试类库（xUnit / FluentAssertions / NSubstitute / Testcontainers）见 7.1；限流见 8.6。
 
 ### 2.3 数据库与部署
 
@@ -87,7 +87,7 @@ src/
 - `components/ui` = 通用、无业务语义的展示控件（Button、Dialog、Select…），来自 shadcn-vue，**只读**
 - `components/business` = 至少依赖一个业务实体类型或业务 Store 的复合控件（如 UserSelectDialog、DeptTreeSelect）
 - 业务定制 ui 组件：通过外层包裹、props 传递、插槽、Tailwind 类名覆盖实现，**禁止改源码**
-- 新增 ui 组件必须通过 `npx shadcn-vue@latest add 组件名` 添加，禁止手动复制
+- 新增 ui 组件必须通过 `npx shadcn-vue@2.x add 组件名` 添加（固定主版本保证可复现，禁止 @latest），禁止手动复制
 
 **TanStack Table**：
 - 列定义必须使用 `ColumnDef<T>` 泛型，与实体类型绑定
@@ -96,7 +96,7 @@ src/
 
 **Zod 表单**：
 - Schema 定义在对应 `types` 文件中，校验规则与后端 DTO 数据注解完全一致
-- 使用 `@vue-zod/form` 绑定，错误统一通过 FormMessage 展示
+- 使用 vee-validate（`@vee-validate/zod`）绑定，错误统一通过 FormMessage 展示
 - 禁止手动编写 if-else 校验逻辑
 
 ### 3.3 状态管理判定标准
@@ -175,6 +175,7 @@ public class ApiResult<T>
 - refresh token 一次性使用（轮换），旧 token 刷新后立即失效，防止重放
 - 密码使用 BCrypt 哈希存储，禁止明文存储和传输
 - Token Claims 包含：用户ID、角色、权限标识、DataScope
+- 权限权衡：权限数量大时不入 Claims，改权限缓存（Redis）+ 变更主动失效；权限变更后最长 2 小时生效（access token 周期），关键权限变更应主动踢线
 - 登录失败连续 5 次锁定账户 15 分钟（Redis 计数）
 
 ### 4.4 EF Core 数据访问
@@ -284,9 +285,9 @@ interface ApiResult<T> {
 - 时间：ISO 8601 字符串
 - 提交：`application/json`
 - 序列化：JSON 统一 camelCase（ASP.NET Core 默认行为，前端类型定义与此对齐）
-- 幂等：POST 提交类接口携带 `Idempotency-Key` 请求头（UUID），后端 Redis 去重 + 数据库唯一索引兜底，重复请求返回 409。实现细则：
+- 幂等：POST 提交类接口携带 `Idempotency-Key` 请求头（UUID），后端 Redis 去重 + 数据库唯一索引兜底。实现细则：
   - 前端生成时机：表单初始化时生成 UUID 随首次提交发送，重试沿用同一 key，新表单重新生成
-  - 后端去重：Redis `SET NX` 写入 `{项目}:idempotency:{key}`，TTL 24 小时（按业务可调）；已存在即视为重复提交，返回 409
+  - 后端去重：Redis `SET NX` 写入 `{项目}:idempotency:{key}`（同时缓存首次响应），TTL 24 小时（按业务可调）；已存在时对比请求体：一致 → 重放首次响应（覆盖网络超时后重试且首次已成功的场景），不一致 → 返回 409
   - 并发兜底：Redis 不可用或 SET NX 失败时由数据库唯一索引兜底，唯一约束冲突同样返回 409
 
 ---
@@ -354,11 +355,11 @@ interface ApiResult<T> {
 
 - 类型白名单（按业务配置，默认 jpg/png/pdf/xlsx）+ 大小限制（默认 10MB）
 - 存储文件名随机化（UUID），路径不可猜测；禁止保留原始文件名直接落盘
-- 上传前校验文件头魔数，不信任仅扩展名
+- 文件头魔数校验：前端预检只是体验优化，**服务端必须复核**（读文件头字节比对类型白名单），不信任仅扩展名
 
 ### 8.6 限流与防滥用
 
-- 登录、验证码、查询导出接口配置限流（AspNetCoreRateLimit / Redis 滑动窗口）
+- 登录、验证码、查询导出接口配置限流：优先 .NET 内置 RateLimiter 中间件（`System.Threading.RateLimiting`）；分布式限流用 Redis + 自定义分区器
 
 ---
 
@@ -377,6 +378,7 @@ interface ApiResult<T> {
 
 - 关键操作必须留痕：登录/登出、权限变更、角色分配、数据删除、审批动作、导出
 - `AuditLog` 表字段：操作人ID、操作时间、IP、UserAgent、模块、操作类型、目标对象、变更前 JSON、变更后 JSON
+- 变更前后 JSON 中密码哈希、手机号、邮箱、身份证等敏感字段必须脱敏或排除，禁止原样落审计表（与 8.4 一致）
 - 实现：EF Core `SaveChangesInterceptor` 自动审计实体变更 + 显式 `IAuditService` 记录业务动作
 - 审计日志只增不改（禁止 Update/Delete），保留策略按合规要求（默认 ≥ 1 年）
 - 审计日志写入失败不阻断主流程，但必须告警
@@ -428,8 +430,8 @@ lint → build → test（单测+集成）→ 覆盖率卡点 → 镜像构建 �
 | staging | 手动审批 | 预发验证，数据结构同生产 |
 | prod | 手动审批 | 保留最近 3 个版本，支持一键回滚 |
 
-- 部署顺序：**先执行数据库迁移脚本，再滚动更新应用**
-- 生产发布后 15 分钟内观察核心指标（错误率、P95 耗时），异常立即回滚
+- 部署顺序：**先执行数据库迁移脚本，再滚动更新应用**；迁移必须向后兼容（先扩后收：先加列/加表，删除列/改名放后续版本），滚动更新期间新旧版本共存
+- 生产发布后 15 分钟内观察核心指标（错误率、P95 耗时），异常立即回滚；错误率按 `ApiResult.code ≠ 0` 统计——业务异常 HTTP 返回 200，只看 5xx 会漏报
 
 ### 12.3 Docker 构建
 
@@ -537,7 +539,7 @@ lint → build → test（单测+集成）→ 覆盖率卡点 → 镜像构建 �
 | 代码检查 | `npm run lint` / `npm run format` |
 | 单元测试 | `npm run test:unit` |
 | E2E 测试 | `npx playwright test` |
-| 新增 shadcn 组件 | `npx shadcn-vue@latest add <组件名>` |
+| 新增 shadcn 组件 | `npx shadcn-vue@2.x add <组件名>`（固定主版本，禁止 @latest） |
 
 ### 后端
 

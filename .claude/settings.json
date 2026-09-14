@@ -1,7 +1,7 @@
 {
-  "defaultMode": "default",
-  "disableBypassPermissionsMode": true,
   "permissions": {
+    "defaultMode": "default",
+    "disableBypassPermissionsMode": "disable",
     "allow": [
       "Bash(npm ci)",
       "Bash(npm ci *)",
@@ -31,7 +31,7 @@
       "Bash(npm remove *)",
       "Bash(dotnet add *)",
       "Bash(dotnet ef *)",
-      "Bash(npx shadcn-vue@latest add *)",
+      "Bash(npx shadcn-vue@* add *)",
       "Bash(git commit*)",
       "Bash(git push*)",
       "Bash(git merge*)",
@@ -49,6 +49,8 @@
       "Bash(docker compose *)",
       "Bash(curl *)",
       "Bash(wget *)",
+      "Bash(powershell *)",
+      "Bash(cmd *)",
       "WebFetch",
       "WebSearch"
     ],

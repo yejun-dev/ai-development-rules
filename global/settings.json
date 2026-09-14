@@ -1,5 +1,6 @@
 {
   "permissions": {
+    "disableBypassPermissionsMode": "disable",
     "ask": [
       "Bash(npm install*)",
       "Bash(npm i *)",
@@ -23,6 +24,8 @@
       "Bash(docker compose *)",
       "Bash(curl *)",
       "Bash(wget *)",
+      "Bash(powershell *)",
+      "Bash(cmd *)",
       "WebFetch",
       "WebSearch"
     ],

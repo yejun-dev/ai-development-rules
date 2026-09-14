@@ -25,7 +25,7 @@
 | 代码检查 | `npm run lint` / `npm run format`（ESLint + Prettier） |
 | 单元测试 | `npm run test:unit`（Vitest） |
 | E2E 测试 | `npx playwright test` |
-| 新增 shadcn 组件 | `npx shadcn-vue@latest add <组件名>`（禁止手动复制源码） |
+| 新增 shadcn 组件 | `npx shadcn-vue@2.x add <组件名>`（固定主版本，禁止 @latest；禁止手动复制源码） |
 
 ### 后端（解决方案名以实际仓库为准）
 
@@ -54,7 +54,7 @@
 ### 前端
 
 - 必须 Composition API + `<script setup lang="ts">`；禁止选项式 API；禁止 `any`，所有变量/函数/参数显式声明类型。
-- 业务实体类型放 `types/`，字段与后端 DTO 完全一致；表单必须 Zod Schema + `@vue-zod/form`，禁止手写 if-else 校验。
+- 业务实体类型放 `types/`，字段与后端 DTO 完全一致；表单必须 Zod Schema + vee-validate（`@vee-validate/zod`），禁止手写 if-else 校验。
 - 列表页必须用 TanStack Table（`ColumnDef<T>` 泛型），禁止手写表格渲染/排序/分页逻辑。
 - 所有请求必须走 `utils/request` 封装实例，接口函数统一定义在 `api/`；禁止组件内直接调 axios。
 - `components/ui/` 为 shadcn-vue 源码，**只读，禁止修改**；业务定制用外层包裹/props/插槽/Tailwind 类名覆盖。
