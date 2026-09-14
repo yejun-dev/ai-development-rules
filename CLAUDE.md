@@ -39,6 +39,7 @@
 | 格式检查 | `dotnet format` |
 
 > 命令跑不通时先排查环境原因并反馈，禁止静默跳过验证。集成测试（Testcontainers）需本地 Docker 运行。
+> `dotnet ef` 工具版本需与 EF Core 主版本匹配（版本不匹配会报错；升级：`dotnet tool update --global dotnet-ef`）。
 > Git 提交信息遵循 Conventional Commits：`feat|fix|docs|style|refactor|test|chore(scope): 描述`（细则见全量规范 11.2）。
 
 ## 二、架构速览
@@ -57,7 +58,7 @@
 - 列表页必须用 TanStack Table（`ColumnDef<T>` 泛型），禁止手写表格渲染/排序/分页逻辑。
 - 所有请求必须走 `utils/request` 封装实例，接口函数统一定义在 `api/`；禁止组件内直接调 axios。
 - `components/ui/` 为 shadcn-vue 源码，**只读，禁止修改**；业务定制用外层包裹/props/插槽/Tailwind 类名覆盖。
-- 样式只用 Tailwind 原子类；主题色/间距/圆角/阴影配置在 `tailwind.config.ts`，禁止新增独立 CSS、禁止硬编码色值。
+- 样式只用 Tailwind 原子类；主题色/间距/圆角/阴影用 CSS `@theme` 配置（Tailwind 4），禁止新增独立 CSS、禁止硬编码色值。
 - 权限：页面级用路由 meta `permission: '模块:操作'`，按钮级用 `v-auth` 指令；数据权限（DataScope）只能由后端过滤，禁止前端控制。
 - 所有 views 路由懒加载；列表必须分页，禁止一次性全量查询。
 - 必须配置前端错误边界（`app.config.errorHandler` + `onErrorCaptured` 降级 UI），禁止未捕获异常导致白屏。

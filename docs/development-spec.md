@@ -22,17 +22,17 @@
 
 | 技术 | 版本 | 强制要求 |
 | --- | --- | --- |
-| Vue | 3.4+ | 必须使用 Composition API + `<script setup lang="ts">`，禁止选项式 API |
+| Vue | 3.5+ | 必须使用 Composition API + `<script setup lang="ts">`，禁止选项式 API |
 | TypeScript | 5.0+ | strict 模式；禁止 `any`，所有变量/函数/参数显式声明类型 |
-| Tailwind CSS | 3.4+ | 优先原子类，禁止新增独立 CSS 文件 |
+| Tailwind CSS | 4.x | 优先原子类，禁止新增独立 CSS 文件；主题配置用 CSS `@theme` |
 | shadcn-vue | 最新稳定版 | 组件源码位于 `src/components/ui`，**禁止直接修改源码** |
 | TanStack Vue Table | 8.x | 所有列表页必须使用，禁止手写原生表格逻辑 |
 | Zod + @vue-zod/form | 最新版 | 所有表单必须定义 Schema，与后端 DTO 校验规则对齐 |
 | Axios | 1.x | 必须使用全局封装实例，禁止直接调用原生 axios |
-| Pinia | 2.x | 管理用户信息、权限、全局配置 |
+| Pinia | 4.x | 管理用户信息、权限、全局配置 |
 | Vue Router | 4.x | 全局前置守卫统一做登录校验、权限校验 |
-| Vite | 5.x | 配置路径别名、自动导入、接口代理 |
-| ESLint + Prettier | 9.x / 3.x | 统一代码风格与静态检查（CI lint 步骤）；配置随仓库提交 |
+| Vite | 8.x | 配置路径别名、自动导入、接口代理 |
+| ESLint + Prettier | 10.x / 3.x | 统一代码风格与静态检查（CI lint 步骤）；配置随仓库提交 |
 
 ### 2.2 后端
 
@@ -51,7 +51,7 @@
 
 ### 2.3 数据库与部署
 
-MySQL 8.0 LTS / Docker 24+ / Docker Compose v2+ / Nginx alpine 稳定版
+MySQL 8.4 LTS / Docker 24+ / Docker Compose v2+ / Nginx alpine 稳定版
 
 ### 2.4 新增依赖原则
 
@@ -129,7 +129,7 @@ src/
 - 所有变量、函数参数、返回值显式声明类型，禁止隐式 `any`
 - 对象结构用 `interface`，联合类型、工具类型用 `type`
 - 业务实体类型在 `types/` 目录，字段名、类型与后端 DTO 完全一致
-- 样式优先 Tailwind 原子类；主题色、间距、圆角、阴影统一在 `tailwind.config.ts` 配置，不硬编码色值
+- 样式优先 Tailwind 原子类；主题色、间距、圆角、阴影统一用 CSS `@theme` 配置（Tailwind 4 写法），不硬编码色值
 
 ### 3.7 前端错误边界
 
@@ -224,7 +224,7 @@ public class ApiResult<T>
 - 所有表结构变更走 EF Core Migrations，迁移文件随代码提交
 - 生产环境用 `Script-Migration` 生成 SQL，DBA 审核后执行
 - **已提交的迁移文件禁止修改**，结构变更必须新增迁移
-- 部署时迁移执行先于应用启动（见第十一章）
+- 部署时迁移执行先于应用启动（见第十二章）
 
 ---
 
@@ -240,7 +240,7 @@ public class ApiResult<T>
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | pageIndex | int | 是 | 页码，从 1 开始 |
-| pageSize | int | 是 | 每页条数 |
+| pageSize | int | 是 | 每页条数，上限 100（超出按 100 处理） |
 | sortField | string | 否 | 排序字段名 |
 | sortOrder | string | 否 | `asc` / `desc` |
 
@@ -433,7 +433,7 @@ lint → build → test（单测+集成）→ 覆盖率卡点 → 镜像构建 �
 ### 12.3 Docker 构建
 
 - 前端：多阶段构建（node 构建 → nginx:alpine 托管），最终镜像 ≤ 50MB，Nginx 同时处理静态资源与 `/api` 反代
-- 后端：多阶段构建（sdk 构建 → aspnet:runtime 运行），端口 5000
+- 后端：多阶段构建（sdk 构建 → aspnet 镜像运行，如 `mcr.microsoft.com/dotnet/aspnet:10.0`），端口 5000
 - **禁止镜像内硬编码连接串、密钥**，统一环境变量注入
 
 ### 12.4 生产编排
@@ -502,7 +502,8 @@ lint → build → test（单测+集成）→ 覆盖率卡点 → 镜像构建 �
 5. **分层清晰**：严格遵守前后端分层，不跨层写逻辑
 6. **完整可运行**：输出代码必须完整、可直接运行，关键依赖必须说明
 7. **测试随行**：新增/修改业务逻辑必须附带测试
-8. **注释适度**：关键逻辑加注释，不写冗余注释，不改无关代码结构
+8. **注释适度**：关键逻辑加注释，不写冗余注释
+9. **最小改动**：不修改无关代码结构，不做规范未要求的"顺手重构"
 
 ---
 
@@ -549,6 +550,7 @@ lint → build → test（单测+集成）→ 覆盖率卡点 → 镜像构建 �
 | 格式检查 | `dotnet format` |
 
 > 项目名/目录名以实际仓库为准；与精简版 [CLAUDE.md](../CLAUDE.md)「一、常用命令」保持一致。
+> `dotnet ef` 工具版本需与 EF Core 主版本匹配（版本不匹配会报错；升级：`dotnet tool update --global dotnet-ef`）。
 
 ## 附录 C：本地 AI 权限配置
 
