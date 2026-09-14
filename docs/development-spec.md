@@ -38,13 +38,16 @@
 
 | 技术 | 版本 | 强制要求 |
 | --- | --- | --- |
-| ASP.NET Core Web API | .NET 8.0 LTS | 使用 `[ApiController]`，顶层路由统一前缀 |
-| EF Core | 8.0 | Code First，迁移管理表结构 |
-| Pomelo.EntityFrameworkCore.MySql | 8.0 | 与 EF Core **主版本对齐，禁止跨大版本混用** |
+| ASP.NET Core Web API | .NET 10.0 LTS | 使用 `[ApiController]`，顶层路由统一前缀 |
+| EF Core | 10.0 | Code First，迁移管理表结构 |
+| Pomelo.EntityFrameworkCore.MySql | 9.0 | 与 EF Core 10 配对使用；主版本不完全对齐，需项目 NoWarn 抑制 NuGet 警告（实测可用）；禁止随意跨大版本混用 |
 | JWT Bearer | 框架内置 | 接口默认需要认证，公开接口显式标记 `[AllowAnonymous]` |
+| FluentValidation | 最新版 | 后端 DTO 入参校验（见 8.2） |
 | Serilog | 最新版 | 结构化日志：请求链路、异常堆栈、业务日志 |
 | StackExchange.Redis | 最新版 | 分布式缓存（见第九章） |
 | Asp.Versioning | 最新版 | URL 版本控制（见 6.1） |
+
+测试类库（xUnit / FluentAssertions / NSubstitute / Testcontainers）与限流组件（AspNetCoreRateLimit）分别见 7.1、8.6。
 
 ### 2.3 数据库与部署
 
@@ -180,7 +183,7 @@ public class ApiResult<T>
 - 关联数据用 `Include()` 显式加载，**禁止懒加载**（防 N+1）
 - 字符串字段必须显式 `HasMaxLength()`，禁止默认 longtext
 - 高频筛选、排序字段必须配置索引（`OnModelCreating` 中定义）
-- 分页查询统一封装，返回 `(List<T> items, int total)`
+- 分页查询统一封装，返回 `PageResult<T>`（结构见 6.3）
 - 事务在业务层控制，禁止在控制器中使用事务
 
 ### 4.5 控制器与依赖注入
@@ -294,7 +297,7 @@ interface ApiResult<T> {
 - 框架：xUnit + FluentAssertions + NSubstitute
 - 单元测试：Service 层覆盖核心业务分支，**行覆盖率 ≥ 60%**（CI 强制卡点）
 - 集成测试：使用 Testcontainers 起真实 MySQL 容器，覆盖 Repository 与关键 API 链路（**需本地 Docker 运行**；环境缺失时反馈并等待处理，禁止跳过集成测试交差）
-- 测试命名：`方法名_场景_期望结果`（如 `CreateUserAsync_邮箱重复_抛出BusinessException`）
+- 测试命名：`方法名_场景_期望结果`（如 `CreateUserAsync_EmailDuplicated_ThrowsBusinessException`）
 - 测试代码与生产代码同 MR 提交，**新增/修改业务逻辑必须附带测试**
 
 ### 7.2 前端
@@ -384,7 +387,7 @@ interface ApiResult<T> {
 ### 11.1 分支模型
 
 - `main`：受保护分支，禁止直接 push、禁止 force push
-- 功能分支从 `main` 拉出，命名：`feature/xxx`、`fix/xxx`、`refactor/xxx`、`hotfix/xxx`
+- 功能分支从 `main` 拉出，命名：`feature/xxx`、`fix/xxx`、`docs/xxx`、`refactor/xxx`、`hotfix/xxx`
 - 合并必须走 MR/PR，至少 1 人 approve + CI 全绿
 
 ### 11.2 Commit 规范
