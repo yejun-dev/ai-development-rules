@@ -16,7 +16,7 @@ Vue 3 + .NET 10 全栈项目的 Claude Code 规范模板：精简版工作规范
 
 ## 快速上手
 
-1. **单个项目**：把 `CLAUDE.md`、`.claude/`、`docs/` 复制到仓库根目录。
+1. **单个项目**：把 `CLAUDE.md`、`.claude/`、`docs/` 复制到仓库根目录，并把 `.claude/settings.local.json` 加入项目的 `.gitignore`。
 2. **所有项目**：按 [global/](global/) 里的两个文件配置一次本机。
 3. **团队分发与演进**：见 [docs/distribution.md](docs/distribution.md)。
 4. **使用注意**：必须从仓库根目录启动 Claude Code（子目录启动会丢失项目级设置）。

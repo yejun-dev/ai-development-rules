@@ -9,3 +9,14 @@ Desktop.ini
 # IDE
 .idea/
 *.swp
+
+# 以下条目为「Use this template」直接建新项目时兜底（规范包自身无这些产物）
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+
+# 后端构建产物
+bin/
+obj/
