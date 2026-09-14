@@ -79,16 +79,17 @@
 - 认证 `Authorization: Bearer {token}`；时间用 ISO 8601 字符串；POST 提交类接口带 `Idempotency-Key` 请求头（UUID）。
 - 错误码按全量规范 6.4 处理：`code=0` 成功，`≥1000` 业务异常；新增业务错误码必须先查阅并登记 [docs/error-codes.md](docs/error-codes.md)。
 - 表结构变更必须走 EF Core 迁移并随代码提交；禁止直接改库；已提交迁移文件禁止修改，只能新增迁移。
-- 所有业务表必含 `Id`（int 自增）、`CreateTime`、`UpdateTime`；重要业务表逻辑删除用 `IsDeleted`，禁止物理删除。
+- 所有业务表必含 `Id`（int 自增，审计日志等高速增长表用 bigint）、`CreateTime`、`UpdateTime`；重要业务表逻辑删除用 `IsDeleted`，禁止物理删除。
 - utf8mb4 / InnoDB；枚举存 int；禁止存储过程、触发器。
 
 ### 安全
 
 - 禁止 SQL 字符串拼接（EF Core 参数化）；密码 BCrypt 哈希，禁止明文存储和传输。
+- 禁止 `v-html` 渲染服务端/用户输入；富文本必须先过白名单净化库（DOMPurify）。
 - 禁止日志输出密码、Token、密钥；敏感配置走 `dotnet user-secrets` / 环境变量，禁止入库入仓。
 - CORS 白名单显式配置，禁止 `AllowAnyOrigin`；统一安全响应头。
 - 文件上传：类型白名单 + 大小限制 + 文件头魔数校验 + UUID 随机文件名，禁止保留原始文件名落盘。
-- 敏感字段（手机号/邮箱/身份证）前端展示脱敏。
+- 敏感字段（手机号/邮箱/身份证）后端按权限脱敏后返回，前端只负责展示。
 - 缓存 key 按 `{项目}:{模块}:{实体}:{id}` 命名；必须设过期时间，禁止永久 key、禁止缓存敏感信息明文。
 
 ## 四、必须确认的场景（未征得同意前禁止动手）

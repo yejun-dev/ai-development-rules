@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | **允许**（免确认） | 日常验证命令：build / lint / format / test（前端与后端）、`dotnet run` 本地启动、只读 git 命令（status/diff/log/show） | CLAUDE.md「一、常用命令」与工作准则第 4 条（交付前必须验证） |
 | **确认**（弹出询问） | 新增/卸载依赖（npm、`dotnet add`）、EF 迁移与数据库操作、新增 shadcn 组件、git 写操作（commit/push/merge/rebase 等）、Docker、删除文件（rm）、外网访问（WebFetch/WebSearch/curl/wget）、Windows 原生命令（powershell/cmd） | 「四、必须确认的场景」：新依赖、数据库变更、破坏性操作；curl/wget 额外覆盖安全规范 8.4（防外传敏感信息） |
-| **拒绝**（不可执行） | 修改 `src/components/ui/` 源码、读取 `.env` 与 `.env.*.local` 密钥文件、force push、`rm -rf`、`npm publish` | 3.2（shadcn 只读红线）、8.4（敏感信息）、11.1（main 禁止 force push） |
+| **拒绝**（不可执行） | 修改 `src/components/ui/` 源码、读取 `.env` 全家族密钥文件（`.env` / `.env.local` / `.env.*.local`，含子目录递归）、force push、`rm -rf`、`npm publish` | 3.2（shadcn 只读红线）、8.4（敏感信息）、11.1（main 禁止 force push） |
 
 未列入上表的命令按 Claude Code 默认模式处理（首次执行时询问）。
 
@@ -22,7 +22,7 @@
 
 ## 已知局限（依赖人工兜底）
 
-- **必须从仓库根目录启动 Claude Code**：从子目录启动会静默丢失项目级 `.claude/settings.json`（官方 issue #74023），团队请统一从仓库根启动。
+- **必须从仓库根目录启动 Claude Code**：从子目录启动会静默丢失项目级 `.claude/settings.json`（[官方 issue #74023](https://github.com/anthropics/claude-code/issues/74023)），团队请统一从仓库根启动。
 - **前缀匹配**：权限规则按命令前缀匹配。`git push -f` 写在命令末尾（如 `git push origin main -f`）时 deny 规则拦不住——但所有 push 都已列入 ask，人工确认时能看到完整命令，这是最终防线。
 - **Windows 原生命令与参数顺序绕过**：PowerShell（`Remove-Item -Recurse -Force`）、CMD（`del /s /q`）等原生命令已列入 ask 兜底，但 deny 无法识别其内部参数；`rm -r -f` 同理可绕过 `rm -rf` deny——所有 `rm *` 均会触发 ask 人工确认。
 - **deny 只拦 AI 的工具调用**：`npx shadcn-vue add`（ask 放行后）由 CLI 进程写入 `ui/` 目录，不会触发 Edit/Write 拦截；靠规范 3.2 约束。
