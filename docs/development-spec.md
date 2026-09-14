@@ -32,6 +32,8 @@
 | Pinia | 4.x | 管理用户信息、权限、全局配置 |
 | Vue Router | 4.x | 全局前置守卫统一做登录校验、权限校验 |
 | Vite | 8.x | 配置路径别名、自动导入、接口代理 |
+| unplugin-auto-import | 最新版 | Vite「自动导入」依赖插件：组合式 API 按需导入 |
+| unplugin-vue-components | 最新版 | Vite「自动导入」依赖插件：组件按需导入（含 shadcn-vue 组件） |
 | Node.js | 24 LTS | 本地与 Docker 构建统一版本（Vite 8 要求 ≥20.19 / ≥22.12） |
 | ESLint + Prettier | 10.x / 3.x | 统一代码风格与静态检查（CI lint 步骤）；配置随仓库提交 |
 
@@ -95,7 +97,7 @@ src/
 - 禁止手写表格行渲染、排序切换等基础逻辑
 
 **Zod 表单**：
-- Schema 定义在对应 `types` 文件中，校验规则与后端 DTO 数据注解完全一致
+- Schema 定义在对应 `types` 文件中，校验规则与后端 DTO 校验规则（DataAnnotations + FluentValidation）完全一致
 - 使用 vee-validate（`@vee-validate/zod`）绑定，错误统一通过 FormMessage 展示
 - 禁止手动编写 if-else 校验逻辑
 
@@ -175,8 +177,8 @@ public class ApiResult<T>
 - JWT 双 token 机制：access token 2 小时（localStorage）+ refresh token 7 天（httpOnly Cookie，见 3.3）
 - refresh token 一次性使用（轮换），旧 token 刷新后立即失效，防止重放
 - 密码使用 BCrypt 哈希存储，禁止明文存储和传输
-- Token Claims 包含：用户ID、角色、权限标识、DataScope
-- 权限权衡：权限数量大时不入 Claims，改权限缓存（Redis）+ 变更主动失效；权限变更后最长 2 小时生效（access token 周期），关键权限变更应主动踢线
+- Token Claims 只包含：用户ID、角色、DataScope（**权限标识不入 Claims**，防 JWT 膨胀——权限多的用户每个请求都携带大 token）
+- 权限标识：Redis 缓存 + 变更主动失效（权限变更即时生效，无需等 token 过期）；关键权限变更应主动踢线
 - 登录失败连续 5 次锁定账户 15 分钟（Redis 计数）
 
 ### 4.4 EF Core 数据访问
@@ -204,7 +206,7 @@ public class ApiResult<T>
 
 ### 5.1 基础
 
-- 字符集 `utf8mb4`，排序规则 `utf8mb4_unicode_ci`，存储引擎 InnoDB
+- 字符集 `utf8mb4`，排序规则 `utf8mb4_0900_ai_ci`（MySQL 8.x 官方默认，Unicode 9.0 排序更快更准），存储引擎 InnoDB
 - 表名与实体一致，帕斯卡命名（`User`、`Role`）
 
 ### 5.2 表与字段
@@ -225,7 +227,7 @@ public class ApiResult<T>
 ### 5.4 迁移
 
 - 所有表结构变更走 EF Core Migrations，迁移文件随代码提交
-- 生产环境用 `Script-Migration` 生成 SQL，DBA 审核后执行
+- 生产环境用 `dotnet ef migrations script` 生成 SQL（跨平台，CI/CD 容器可用），DBA 审核后执行
 - **已提交的迁移文件禁止修改**，结构变更必须新增迁移
 - 部署时迁移执行先于应用启动（见第十二章）
 
@@ -417,11 +419,12 @@ Conventional Commits：`feat|fix|docs|style|refactor|test|chore(scope): 描述`
 ### 12.1 流水线（每次 MR 自动触发）
 
 ```
-lint → build → test（单测+集成）→ 覆盖率卡点 → 镜像构建 → 推送镜像仓库
+lint → build → test（单测+集成）→ 覆盖率卡点 → 镜像构建（只构建不推送，验证 Dockerfile 可构建）
 ```
 
 - 镜像仓库：Harbor / 阿里云 ACR
 - 镜像 tag：`{语义化版本}-{git短sha}`，禁止覆盖已推送的 tag
+- 镜像推送时机：MR 阶段只构建不推送；合入 main 后构建并推送正式 tag（避免 MR 临时镜像堆积）
 
 ### 12.2 环境与发布
 
