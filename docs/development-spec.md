@@ -107,15 +107,16 @@ src/
 | 仅单页面内部状态 | `ref` / `reactive` |
 | 可复用的有状态逻辑 | 抽成 `composables/useXxx.ts` |
 
-- token 持久化到 localStorage，退出登录同步清空
+- access token 持久化到 localStorage，退出登录同步清空
+- **refresh token 禁止存 localStorage**，必须走 httpOnly + Secure + SameSite=Strict Cookie（一次 XSS 即可窃取 7 天长期凭证），刷新时由浏览器自动携带
 - 禁止把页面私有状态塞进全局 Store
 
 ### 3.4 请求规范
 
 - 所有接口必须调用 `@/utils/request` 导出的 `request` 实例，接口函数统一在 `api/` 目录定义
 - 入参、出参必须声明明确类型，禁止组件内直接写 axios 调用
-- 接口路径统一带 `/api` 前缀
-- **token 无感刷新**：响应拦截器捕获 401 → 用 refresh token 换新 → 重放原请求；刷新期间的并发请求必须进入队列等待，refresh 失效才跳转登录页
+- `/api` 前缀由 request 实例的 baseURL 统一携带，`api/` 目录函数内路径不再重复 `/api`（如 `get('/v1/users')`），避免出现 `/api/api`
+- **token 无感刷新**：响应拦截器捕获 401 → 调 refresh 接口换新（refresh token 走 Cookie，请求 `withCredentials`）→ 重放原请求；刷新期间的并发请求必须进入队列等待，refresh 失效才跳转登录页
 
 ### 3.5 路由与权限
 
@@ -151,7 +152,7 @@ YourProject.Infrastructure/    # 基础设施层：Data(AppDbContext) / Reposito
 YourProject.Domain/            # 领域层：Entities / Enums / Exceptions
 ```
 
-**分层原则**：上层依赖下层，依赖注入管理生命周期；禁止跨层调用，禁止控制器直接操作 DbContext。
+**分层原则**：上层依赖下层，依赖注入管理生命周期；禁止跨层调用，禁止控制器直接操作 DbContext。接口（抽象）定义在 Application 层、实现在 Infrastructure 层（依赖倒置），项目引用方向为 `Api → Application`、`Infrastructure → Application`、`Infrastructure → Domain`。
 
 ### 4.2 统一响应与异常
 
@@ -171,7 +172,7 @@ public class ApiResult<T>
 
 ### 4.3 认证与授权
 
-- JWT 双 token 机制：access token 2 小时 + refresh token 7 天
+- JWT 双 token 机制：access token 2 小时（localStorage）+ refresh token 7 天（httpOnly Cookie，见 3.3）
 - refresh token 一次性使用（轮换），旧 token 刷新后立即失效，防止重放
 - 密码使用 BCrypt 哈希存储，禁止明文存储和传输
 - Token Claims 包含：用户ID、角色、权限标识、DataScope
@@ -190,7 +191,7 @@ public class ApiResult<T>
 
 ### 4.5 控制器与依赖注入
 
-- 路由：`[Route("/api/v1/[controller]")]`，并启用 `AddRouting(o => o.LowercaseUrls = true)` 统一小写 URL
+- 路由：`[Route("api/v{version:apiVersion}/[controller]")]` + `AddApiVersioning()`（控制器标注 `[ApiVersion("1.0")]`，URL 形如 `/api/v1/users`），并启用 `AddRouting(o => o.LowercaseUrls = true)` 统一小写 URL
 - RESTful 风格：GET 查询 / POST 新增 / PUT 修改 / DELETE 删除
 - 入参使用 DTO，禁止直接使用 Entity 作为接口参数
 - 分页参数继承 `PageQuery` 基类（PageIndex、PageSize、SortField、SortOrder）
@@ -208,7 +209,7 @@ public class ApiResult<T>
 
 ### 5.2 表与字段
 
-- 所有业务表必填：`Id`（int 自增主键）、`CreateTime`、`UpdateTime`（datetime）
+- 所有业务表必填：`Id`（自增主键）、`CreateTime`、`UpdateTime`（datetime）；普通业务表用 int，审计日志等高速增长表用 **bigint**（int 上限约 21 亿）
 - 重要业务表包含 `IsDeleted`（bool，默认 false）实现逻辑删除，**禁止物理删除**
 - 「重要业务表」指用户、角色、权限、订单、审批等核心实体；日志表（审计日志除外，见第十章）、会话表、临时表等允许物理删除
 - 字符串按业务指定长度（姓名 50、邮箱 100、备注 500）
@@ -234,8 +235,8 @@ public class ApiResult<T>
 
 ### 6.1 版本控制
 
-- 接口 URL 统一带版本号：`/api/v1/[controller]`（Asp.Versioning）
-- 破坏性变更必须升 `v2`，旧版本保留至少一个大版本周期并标注废弃
+- 接口 URL 统一带版本号：`/api/v1/[controller]`（Asp.Versioning 参数化路由，见 4.5；默认版本 v1）
+- 破坏性变更必须升 `v2`（新控制器或同控制器 `[ApiVersion("2.0")]` 分方法映射），旧版本保留至少一个大版本周期并标注废弃
 
 ### 6.2 通用分页请求
 
@@ -287,7 +288,7 @@ interface ApiResult<T> {
 - 序列化：JSON 统一 camelCase（ASP.NET Core 默认行为，前端类型定义与此对齐）
 - 幂等：POST 提交类接口携带 `Idempotency-Key` 请求头（UUID），后端 Redis 去重 + 数据库唯一索引兜底。实现细则：
   - 前端生成时机：表单初始化时生成 UUID 随首次提交发送，重试沿用同一 key，新表单重新生成
-  - 后端去重：Redis `SET NX` 写入 `{项目}:idempotency:{key}`（同时缓存首次响应），TTL 24 小时（按业务可调）；已存在时对比请求体：一致 → 重放首次响应（覆盖网络超时后重试且首次已成功的场景），不一致 → 返回 409
+  - 后端去重：Redis `SET NX` 写入 `{项目}:idempotency:{模块}:{key}`（与第九章缓存 key 命名对齐；同时缓存首次响应），TTL 24 小时（按业务可调）；已存在时对比请求体：一致 → 重放首次响应（覆盖网络超时后重试且首次已成功的场景），不一致 → 返回 409
   - 并发兜底：Redis 不可用或 SET NX 失败时由数据库唯一索引兜底，唯一约束冲突同样返回 409
 
 ---
@@ -338,7 +339,7 @@ interface ApiResult<T> {
 ### 8.2 传输与注入
 
 - EF Core 参数化查询，禁止拼接 SQL 字符串
-- 前端输出自动转义（XSS），后端 FluentValidation 校验输入
+- 前端输出自动转义（XSS），后端 FluentValidation 校验输入；**禁止 `v-html` 渲染服务端/用户输入**，富文本必须先过白名单净化库（如 DOMPurify）
 
 ### 8.3 CORS 与安全响应头
 
@@ -347,7 +348,7 @@ interface ApiResult<T> {
 
 ### 8.4 敏感信息
 
-- 手机号、邮箱、身份证前端展示脱敏（如 `138****8000`）
+- 手机号、邮箱、身份证按权限脱敏：**后端脱敏后返回**（无权限直接返回 `138****8000`，本人/授权角色返回明文），前端只负责展示——前端持明文做掩码防不住抓包与调试工具
 - 日志禁止输出密码、Token、密钥
 - 敏感配置：开发环境 `dotnet user-secrets`，生产环境环境变量注入，**禁止入库/入仓**
 
@@ -368,7 +369,7 @@ interface ApiResult<T> {
 - 分布式缓存：Redis（StackExchange.Redis）；进程内缓存：`IMemoryCache`
 - 模式：cache-aside —— 读：先查缓存，未命中再查数据库并回填缓存；写：先更新数据库，再失效缓存
 - Key 命名：`{项目}:{模块}:{实体}:{id}`，如 `admin:user:info:1001`
-- 字典、组织架构、权限等低频变更数据：本地缓存 TTL 10 分钟 + 更新时主动失效
+- 字典、组织架构、权限等低频变更数据：本地缓存 TTL 10 分钟 + 更新时主动失效；**多实例部署时改用 Redis**（或本地缓存 + Redis Pub/Sub 广播失效）——IMemoryCache 是进程内的，主动失效只清当前节点，其余节点旧数据最长残留 10 分钟
 - 热点查询：Redis，TTL 按业务定（默认 5 分钟）
 - **禁止缓存敏感信息明文**；缓存必须设置过期时间，禁止永久 key
 
@@ -436,7 +437,7 @@ lint → build → test（单测+集成）→ 覆盖率卡点 → 镜像构建 �
 ### 12.3 Docker 构建
 
 - 前端：多阶段构建（node:24-alpine 构建 → nginx:alpine 托管），最终镜像 ≤ 50MB，Nginx 同时处理静态资源与 `/api` 反代
-- 后端：多阶段构建（sdk 构建 → aspnet 镜像运行，如 `mcr.microsoft.com/dotnet/aspnet:10.0`），端口 5000
+- 后端：多阶段构建（sdk 构建 → aspnet 镜像运行，如 `mcr.microsoft.com/dotnet/aspnet:10.0`），容器内端口 8080（.NET 8+ 官方镜像默认 `ASPNETCORE_HTTP_PORTS=8080`，可按需覆盖）
 - **禁止镜像内硬编码连接串、密钥**，统一环境变量注入
 
 ### 12.4 生产编排
@@ -561,6 +562,6 @@ lint → build → test（单测+集成）→ 覆盖率卡点 → 镜像构建 �
 
 - **允许（免确认）**：日常验证命令（build / lint / format / test、本地启动）与只读 git 命令
 - **确认（弹窗询问）**：新增/卸载依赖、EF 迁移、shadcn 组件、git 写操作、Docker、删除文件、外网访问
-- **拒绝（不可执行）**：修改 `components/ui` 源码、读取 `.env*.local` 密钥文件、force push、`rm -rf`、`npm publish`
+- **拒绝（不可执行）**：修改 `components/ui` 源码、读取 `.env` 全家族密钥文件（`.env` / `.env.local` / `.env.*.local`，含子目录递归）、force push、`rm -rf`、`npm publish`
 
 规则说明与按仓库调整方法见 `.claude/README.md`；个人差异写在 `.claude/settings.local.json`（加入 .gitignore，不随仓库提交）。

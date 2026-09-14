@@ -9,9 +9,14 @@ Claude Code 的官方机制里没有"一键应用到所有新项目"的开关，
 - **方案 A（推荐）· Git 模板仓库**：把本规范包建成模板仓库，托管平台（GitHub "Use this template" / GitLab Template）建仓时选择该模板，规范文件自动就位。
 - **方案 B · 脚手架脚本**：新项目初始化时复制最新版：
   ```bash
-  # 从规范包仓库复制
+  # 从规范包仓库复制（macOS / Linux / Git Bash）
   git clone --depth 1 <规范包仓库地址> /tmp/rules
   cp -r /tmp/rules/CLAUDE.md /tmp/rules/.claude /tmp/rules/docs <新项目>/
+  ```
+  ```powershell
+  # Windows PowerShell 等价脚本
+  git clone --depth 1 <规范包仓库地址> "$env:TEMP\rules"
+  Copy-Item "$env:TEMP\rules\CLAUDE.md", "$env:TEMP\rules\.claude", "$env:TEMP\rules\docs" -Destination <新项目> -Recurse -Force
   ```
   团队脚手架 CLI（如 `create-xxx`）应在建项目时自动执行这一步。
 - **方案 C · 大仓（monorepo）**：仓库根放一份，`frontend/`、`backend/` 子目录各放更细的 CLAUDE.md（Claude Code 按工作目录逐级加载）。
@@ -37,7 +42,7 @@ Claude Code 的官方机制里没有"一键应用到所有新项目"的开关，
 
 ## 常见坑（全部实测确认）
 
-- **必须从仓库根目录启动 Claude Code**：从子目录启动会静默丢失项目级 `.claude/settings.json`（官方 issue #74023）。
+- **必须从仓库根目录启动 Claude Code**：从子目录启动会静默丢失项目级 `.claude/settings.json`（[官方 issue #74023](https://github.com/anthropics/claude-code/issues/74023)）。
 - permissions 数组跨层合并、**只能加不能减**；评估顺序 deny → ask → allow，deny 永远最高优先、任何层都无法覆盖。
 - 设置文件解析失败会整文件拒绝生效，用 `claude doctor` 排查。
 - 验证三件套：`/memory` 看实际加载的记忆文件；`/permissions` 看最终生效的权限规则；`/status` 看设置来源。
