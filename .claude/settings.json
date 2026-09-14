@@ -41,6 +41,7 @@
       "Bash(git branch*)",
       "Bash(git stash*)",
       "Bash(git tag*)",
+      "Bash(git cherry-pick*)",
       "Bash(git rm*)",
       "Bash(rm *)",
       "Bash(docker *)",

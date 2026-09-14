@@ -19,7 +19,7 @@
 
 | 用途 | 命令 |
 | --- | --- |
-| 安装依赖 | `npm install` |
+| 安装依赖 | `npm ci`（按 lockfile，免确认）/ `npm install`（变更依赖，需确认） |
 | 启动开发 | `npm run dev` |
 | 构建 | `npm run build` |
 | 代码检查 | `npm run lint` / `npm run format`（ESLint + Prettier） |
@@ -60,6 +60,7 @@
 - 样式只用 Tailwind 原子类；主题色/间距/圆角/阴影配置在 `tailwind.config.ts`，禁止新增独立 CSS、禁止硬编码色值。
 - 权限：页面级用路由 meta `permission: '模块:操作'`，按钮级用 `v-auth` 指令；数据权限（DataScope）只能由后端过滤，禁止前端控制。
 - 所有 views 路由懒加载；列表必须分页，禁止一次性全量查询。
+- 必须配置前端错误边界（`app.config.errorHandler` + `onErrorCaptured` 降级 UI），禁止未捕获异常导致白屏。
 
 ### 后端
 
@@ -75,7 +76,7 @@
 
 - 接口 URL 带版本号；破坏性变更必须升 `v2`，旧版本保留至少一个大版本周期并标注废弃。
 - 认证 `Authorization: Bearer {token}`；时间用 ISO 8601 字符串；POST 提交类接口带 `Idempotency-Key` 请求头（UUID）。
-- 错误码按全量规范 6.4 处理：`code=0` 成功，`≥1000` 业务异常。
+- 错误码按全量规范 6.4 处理：`code=0` 成功，`≥1000` 业务异常；新增业务错误码必须先查阅并登记 [docs/error-codes.md](docs/error-codes.md)。
 - 表结构变更必须走 EF Core 迁移并随代码提交；禁止直接改库；已提交迁移文件禁止修改，只能新增迁移。
 - 所有业务表必含 `Id`（int 自增）、`CreateTime`、`UpdateTime`；重要业务表逻辑删除用 `IsDeleted`，禁止物理删除。
 - utf8mb4 / InnoDB；枚举存 int；禁止存储过程、触发器。
@@ -96,6 +97,7 @@
 - 删除或重写已有文件、公共封装
 - 数据库表结构变更（含索引调整）
 - 破坏性接口变更（涉及版本升级）
+- 后端 DTO / 接口数据结构变更（需同步前端 types）
 
 ## 五、交付前自查清单
 
@@ -108,6 +110,8 @@
 - [ ] 无安全隐患（明文密码、SQL 拼接、敏感信息泄露、CORS 放开）
 - [ ] 无未约定的第三方依赖
 - [ ] 数据库变更有迁移文件
+- [ ] 后端 DTO 变更已同步前端 types（字段/类型一致）
+- [ ] 新增业务错误码已登记 docs/error-codes.md
 - [ ] 新逻辑附带测试，且已本地跑通
 - [ ] 关键操作有审计日志
 - [ ] 满足性能预算（路由懒加载、列表分页、无全量查询）
