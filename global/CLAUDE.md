@@ -6,7 +6,7 @@
 ## 适用技术栈
 
 - 前端：Vue 3 + TypeScript(strict) + Tailwind CSS + shadcn-vue + TanStack Table + Zod + Pinia + Vite
-- 后端：.NET 8 四层架构（`Api → Application → Infrastructure → Domain`）+ EF Core (MySQL) + JWT 双 token + Redis
+- 后端：.NET 10 四层架构（`Api → Application → Infrastructure → Domain`）+ EF Core (MySQL) + JWT 双 token + Redis
 - 接口：RESTful，URL 统一 `/api/v1/[controller]`；响应统一 `ApiResult<T>`（`code=0` 成功）
 
 ## 工作准则

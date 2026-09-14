@@ -44,7 +44,7 @@
 ## 二、架构速览
 
 - 前端：Vue 3 + TypeScript(strict) + Tailwind CSS + shadcn-vue + TanStack Table + Zod + Pinia + Vite，目录结构见全量规范 3.1。
-- 后端：.NET 8 四层架构 `Api → Application → Infrastructure → Domain`，EF Core (MySQL) + JWT 双 token + Redis，分层原则见全量规范 4.1。
+- 后端：.NET 10 四层架构 `Api → Application → Infrastructure → Domain`，EF Core (MySQL) + JWT 双 token + Redis，分层原则见全量规范 4.1。
 - 接口：RESTful，URL 统一 `/api/v1/[controller]` 小写；响应统一 `ApiResult<T>`（`code=0` 成功）。
 - 关键封装（优先复用）：前端 `utils/request` 请求实例、`api/` 接口定义、`stores/` 状态、`components/business/` 业务组件；后端 `ApiResult` 与全局 Filter、`BusinessException`、`PageQuery` 分页基类、公共审计/缓存服务。
 
@@ -118,7 +118,7 @@
 
 ## 六、全量规范
 
-详细规则（完整目录结构、组件/表格/表单细则、状态管理判定、token 无感刷新细节、错误码表、缓存/审计细则、Git 协作与 CI/CD、性能预算、命名对照表）见 [docs/development-spec.md](docs/development-spec.md)。
+详细规则（完整目录结构、组件/表格/表单细则、状态管理判定、token 无感刷新细节、错误码表与注册表（docs/error-codes.md）、缓存/审计细则、Git 协作与 CI/CD、性能预算、命名对照表）见 [docs/development-spec.md](docs/development-spec.md)。
 
 > 文件组织：本文件放在仓库根目录。前后端分目录（如 `frontend/`、`backend/`）时，可在各目录放置更细的 CLAUDE.md，Claude Code 会按工作目录自动加载。
 >
