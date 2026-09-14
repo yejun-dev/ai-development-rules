@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | **允许**（免确认） | 日常验证命令：build / lint / format / test（前端与后端）、`dotnet run` 本地启动、只读 git 命令（status/diff/log/show） | CLAUDE.md「一、常用命令」与工作准则第 4 条（交付前必须验证） |
 | **确认**（弹出询问） | 新增/卸载依赖（npm、`dotnet add`）、EF 迁移与数据库操作、新增 shadcn 组件、git 写操作（commit/push/merge/rebase 等）、Docker、删除文件（rm）、外网访问（WebFetch/WebSearch/curl/wget）、Windows 原生命令（powershell/cmd） | 「四、必须确认的场景」：新依赖、数据库变更、破坏性操作；curl/wget 额外覆盖安全规范 8.4（防外传敏感信息） |
-| **拒绝**（不可执行） | 修改 `src/components/ui/` 源码、读取 `.env` 全家族密钥文件（`.env` / `.env.local` / `.env.*.local`，含子目录递归）、force push、`rm -rf`、`npm publish` | 3.2（shadcn 只读红线）、8.4（敏感信息）、11.1（main 禁止 force push） |
+| **拒绝**（不可执行） | 修改 `src/components/ui/` 源码、读取 `.env` 全家族密钥文件（`.env` / `.env.local` / `.env.*.local`，含子目录递归）、force push、`rm -rf`、`npm publish` / `dotnet nuget push` | 3.2（shadcn 只读红线）、8.4（敏感信息）、11.1（main 禁止 force push） |
 
 未列入上表的命令按 Claude Code 默认模式处理（首次执行时询问）。
 
