@@ -22,6 +22,7 @@
 - 前端必须 Composition API + `<script setup lang="ts">`；禁止 `any`，类型显式声明。
 - shadcn-vue 组件目录（`src/components/ui/`）**只读，禁止修改源码**；业务定制用外层包裹/props/插槽/Tailwind 覆盖。
 - 列表页必须 TanStack Table；表单必须 Zod Schema；所有请求走全局 request 封装，禁止组件内直连 axios。
+- 按钮级权限指令（`v-auth`）靠**替换 DOM 节点**实现，只适用于渲染一次就不再变动的按钮；TanStack Table 的行内按钮每次翻页/排序都会重建，用它会抛 `NotFoundError` 直接白屏——**动态渲染的按钮一律改用条件渲染**。前端隐藏按钮只是体验优化，**鉴权只认后端**。
 - 样式只用 Tailwind 原子类，禁止新增独立 CSS、禁止硬编码色值。
 - 后端严格分层，禁止跨层调用、禁止 Controller 直接操作 DbContext。
 - 控制器返回业务对象由全局 Filter 包装，禁止手动构造 ApiResult、禁止 try-catch 返回错误。

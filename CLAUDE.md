@@ -36,9 +36,10 @@
 | 启动接口 | `dotnet run --project src/YourProject.Api` |
 | 单元/集成测试 | `dotnet test` |
 | 新增迁移 | `dotnet ef migrations add <Name> --project src/YourProject.Infrastructure --startup-project src/YourProject.Api` |
-| 格式检查 | `dotnet format` |
+| 格式检查 | `dotnet format`（**进到各项目目录**执行） |
 
-> 命令跑不通时先排查环境原因并反馈，禁止静默跳过验证。集成测试（Testcontainers）需本地 Docker 运行。
+> 命令跑不通时先排查环境原因并反馈，禁止静默跳过验证。集成测试（Testcontainers 需本地 Docker；或 `WebApplicationFactory<Program>` 直连开发态容器）详见全量规范 7.1。
+> ⚠️ `dotnet format` **不支持 `.slnx` 工作区**：在解决方案根目录执行会打印 help 并**以退出码 0 结束**——静默通过，CI 会绿着放过未格式化的代码。进到各项目目录执行 `dotnet format whitespace --verify-no-changes`（该子命令不接受 `--nologo`，会被当成文件路径）。
 > `dotnet ef` 工具版本需与 EF Core 主版本匹配（版本不匹配会报错；升级：`dotnet tool update --global dotnet-ef`）。
 > Git 提交信息遵循 Conventional Commits：`feat|fix|docs|style|refactor|test|chore(scope): 描述`（细则见全量规范 11.2）。
 
@@ -59,7 +60,7 @@
 - 所有请求必须走 `utils/request` 封装实例，接口函数统一定义在 `api/`；禁止组件内直接调 axios。
 - `components/ui/` 为 shadcn-vue 源码，**只读，禁止修改**；业务定制用外层包裹/props/插槽/Tailwind 类名覆盖。
 - 样式只用 Tailwind 原子类；主题色/间距/圆角/阴影用 CSS `@theme` 配置（Tailwind 4），禁止新增独立 CSS、禁止硬编码色值。
-- 权限：页面级用路由 meta `permission: '模块:操作'`，按钮级用 `v-auth` 指令；数据权限（DataScope）只能由后端过滤，禁止前端控制。
+- 权限：页面级用路由 meta `permission: '模块:操作'`，按钮级用 `v-auth` 指令（**动态渲染的按钮例外**：`v-auth` 靠替换 DOM 节点实现，TanStack Table 行内按钮每次翻页/排序都会重建，用它必抛 `NotFoundError`，改走条件渲染）；数据权限（DataScope）只能由后端过滤，禁止前端控制。
 - 所有 views 路由懒加载；列表必须分页，禁止一次性全量查询。
 - 必须配置前端错误边界（`app.config.errorHandler` + `onErrorCaptured` 降级 UI），禁止未捕获异常导致白屏。
 

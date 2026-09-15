@@ -43,14 +43,14 @@
 | --- | --- | --- |
 | ASP.NET Core Web API | .NET 10.0 LTS | 使用 `[ApiController]`，顶层路由统一前缀 |
 | EF Core | 10.0 | Code First，迁移管理表结构 |
-| Pomelo.EntityFrameworkCore.MySql | 9.0（过渡方案） | 官方尚无 EF Core 10 适配版（最新 9.0.0 仅支持 EF Core 9），实际项目采用 9.0 + EF Core 10 组合，需项目 NoWarn 抑制 NuGet 警告（实测可用）；待官方适配发布后升级，或改用 Microting 分支（10.x，API 兼容仅换命名空间）；禁止随意跨大版本混用 |
+| Microting.EntityFrameworkCore.MySql | 10.0.11 | Pomelo 尚无 EF Core 10 适配版（9.0.0 仅支持 EF Core 9）。**实测 Pomelo 9 + EF Core 10 组合运行期崩溃**：`NoWarn` 只能压住 NU1608 警告，压不住运行期的 `TypeLoadException` / `MissingMethodException`，而且 `build` 与生成迁移都能通过，要到真连库查询才暴露——所以**"编译通过"不能作为选型依据，必须真跑一次迁移 + 真查一次库**。改用 Microting 分支（10.x）：`UseMySql` API 一致，仅换包名与命名空间。禁止跨大版本混用 |
 | JWT Bearer | 框架内置 | 接口默认需要认证，公开接口显式标记 `[AllowAnonymous]` |
 | FluentValidation | 最新版 | 后端 DTO 入参校验（见 8.2） |
 | Serilog | 最新版 | 结构化日志：请求链路、异常堆栈、业务日志 |
 | StackExchange.Redis | 最新版 | 分布式缓存（见第九章） |
 | Asp.Versioning | 最新版 | URL 版本控制（见 6.1） |
 
-测试类库（xUnit / FluentAssertions / NSubstitute / Testcontainers）见 7.1；限流见 8.6。
+测试类库（xUnit / FluentAssertions / NSubstitute / Testcontainers / Microsoft.AspNetCore.Mvc.Testing）见 7.1；限流见 8.6。
 
 ### 2.3 数据库与部署
 
@@ -125,6 +125,8 @@ src/
 - 公开页面在路由 meta 标记 `public: true`，其余默认需要登录
 - 页面权限：路由 meta `permission: '模块:操作'`，全局守卫自动校验
 - 按钮级权限：`v-auth="'权限码'"` 指令，无权限自动移除元素
+  - ⚠️ `v-auth` 靠**替换 DOM 节点**实现，只适用于渲染一次就不再变动的按钮。TanStack Table 的行内按钮由表格在每次翻页/排序时重建，被指令换掉的节点仍被 Vue 引用，下一次 patch 会抛 `NotFoundError` 直接白屏。**动态渲染的按钮改用条件渲染**（`hasPermission()` + `v-if`）
+- **鉴权只认后端**：前端隐藏按钮只是体验优化，绕过前端直接调接口必须同样被拦下（权限判定在服务端逐次执行，不依赖前端是否渲染过按钮）
 - 权限码命名：`模块名:操作名`（如 `user:view`、`user:add`）
 - **数据权限（行级）**：后端返回用户 DataScope（All=全部 / Dept=本部门 / DeptAndChild=本部门及下级 / Self=仅本人），查询过滤在 Service 层统一拼接，禁止前端控制数据范围
 
@@ -301,7 +303,11 @@ interface ApiResult<T> {
 
 - 框架：xUnit + FluentAssertions + NSubstitute
 - 单元测试：Service 层覆盖核心业务分支，**行覆盖率 ≥ 60%**（Coverlet 统计，CI 强制卡点）
-- 集成测试：使用 Testcontainers 起真实 MySQL 容器，覆盖 Repository 与关键 API 链路（**需本地 Docker 运行**；环境缺失时反馈并等待处理，禁止跳过集成测试交差）
+- 集成测试（两种方案按项目条件选，覆盖 Repository 与关键 API 链路）：
+  - **方案一 Testcontainers**：起真实 MySQL 容器，与开发环境完全隔离（**需本地 Docker 运行**；环境缺失时反馈并等待处理，禁止跳过集成测试交差）
+  - **方案二 `WebApplicationFactory<Program>`**：不起独立容器，直连开发态容器，靠**独立库名 + 独立 Redis db** 隔离。需在 Api 项目末尾加 `public partial class Program { }` 开放入口点（顶级语句生成的 `Program` 默认 internal，测试程序集看不见）
+  - ⚠️ **两种方案的配置覆盖都必须走环境变量**（`ConnectionStrings__Default` / `Redis__Configuration`），**禁止用 `ConfigureAppConfiguration`**：应用读取连接串发生在 `builder.Build()` **之前**，而该覆盖要等 `Build()` 才合并——覆盖会**静默失效**，测试实际连的是**开发库**，夹具一句 `EnsureDeleted()` 就把开发库整个删掉重建。对照：`ConfigureServices` 有效，因为服务是惰性解析的
+  - ⚠️ **测试隔离必须被验证**：跑完要确认测试库真的存在且被写过（例如核对库里出现了 `xxx_test`），**不能只看测试变绿**——全绿也可能跑在错误的库上
 - 测试命名：`方法名_场景_期望结果`（如 `CreateUserAsync_EmailDuplicated_ThrowsBusinessException`）
 - 测试代码与生产代码同 MR 提交，**新增/修改业务逻辑必须附带测试**
 
@@ -363,6 +369,10 @@ interface ApiResult<T> {
 ### 8.6 限流与防滥用
 
 - 登录、验证码、查询导出接口配置限流：优先 .NET 内置 RateLimiter 中间件（`System.Threading.RateLimiting`）；分布式限流用 Redis + 自定义分区器
+- **反代后必须还原真实客户端 IP**，否则按 IP 分区会退化成"全局共享一个配额"——一个人狂点，所有用户一起被挡在门外：
+  - `UseForwardedHeaders` 必须排在 `UseRateLimiter` **之前**，限流读的就是它还原出来的 `RemoteIpAddress`；顺序反了完全不起作用
+  - 清空可信代理必须用 `KnownNetworks.Clear()` / `KnownProxies.Clear()`。写成集合初始化器 `KnownNetworks = { }` 的含义是**"不添加任何元素"，不是清空**——默认的可信代理（回环地址）会原样留着，反代容器不被信任，`X-Forwarded-For` 被整个忽略。**代码看着写对了、编译也通过，实际一点作用都没有**
+  - 清空的前提是「应用不暴露到宿主机、只能从内部网络到达」；一旦暴露到宿主机，必须改为只信任固定代理网段，否则任何人都能伪造 `X-Forwarded-For` 绕过限流
 
 ---
 
@@ -439,15 +449,29 @@ lint → build → test（单测+集成）→ 覆盖率卡点 → 镜像构建�
 
 ### 12.3 Docker 构建
 
-- 前端：多阶段构建（node:24-alpine 构建 → nginx:alpine 托管），最终镜像 ≤ 50MB，Nginx 同时处理静态资源与 `/api` 反代
+- 前端：多阶段构建（node:24-alpine 构建 → **`nginx:alpine-slim`** 托管），最终镜像 ≤ 50MB，Nginx 同时处理静态资源与 `/api` 反代
+  - **必须用 `-slim` 变体**：实测 `nginx:alpine` **103MB**、`nginx:alpine-slim` **30MB**。用 `alpine` 永远达不到 50MB 预算——多出来的是 geoip / xslt / perl / image-filter 等静态托管与反代一个都用不上的可选模块
+  - 体积以 `docker image ls`（**解压后**）为准：Docker Hub 页面标的是**压缩后**体积，两者能差一倍以上，做预算别抄页面上的数字
 - 后端：多阶段构建（sdk 构建 → aspnet 镜像运行，如 `mcr.microsoft.com/dotnet/aspnet:10.0`），容器内端口 8080（.NET 8+ 官方镜像默认 `ASPNETCORE_HTTP_PORTS=8080`，可按需覆盖）
+  - 运行阶段用镜像自带的非 root 用户（.NET 8+ 为 `USER app`），容器被攻破时不会直接拿到 root
+  - ⚠️ **运行镜像里既没有 curl 也没有 wget**，健康检查用镜像自带的 `bash` 对 `/health` 发 `/dev/tcp` 请求；**不要为了装 curl 引入 `apt-get`**——那会让镜像构建依赖 apt 源的可达性（国内网络下经常 502），把构建卡在一个与代码毫无关系的地方
+- 构建顺序：**先拷依赖清单（`.csproj` / `package.json` + lockfile）单独还原，再拷源码**。Docker 按层缓存，依赖没变时改业务代码可命中缓存；顺序写反了，改一行代码就要重下全部依赖
+- 前端安装依赖用 `npm ci` 而非 `npm install`（严格按 lockfile，lockfile 与 package.json 不一致时直接失败）
+- 镜像构建**不跑测试**：用 `.dockerignore` 排除 `tests/`、`node_modules/`、`bin/`、`obj/`。测试是 CI 的职责，让镜像构建跑测试只会把"构建问题"和"代码问题"混在一起
 - **禁止镜像内硬编码连接串、密钥**，统一环境变量注入
 
 ### 12.4 生产编排
 
 - docker-compose 编排前端、后端、MySQL、Redis
-- MySQL 数据、Redis 数据挂载宿主机卷
+- MySQL 数据、Redis 数据挂载宿主机卷（Linux 容器下**用命名卷，禁止 bind mount**：Windows 上 bind mount 走 9p 文件系统，会导致 InnoDB 权限失败、性能极差甚至崩溃）
 - 仅前端 Nginx 暴露 80/443；后端、数据库、Redis 仅内部网络通信
+- 服务间用**服务名**互访（`mysql:3306`、`redis:6379`、`http://api:8080`），这是 Docker 内建 DNS 的能力
+- **启动顺序用 `depends_on` + `condition` 表达**，不要靠"多试几次"：
+  - 数据库用 `service_healthy`（健康检查要发**真实查询**而非 `mysqladmin ping`——ping 在认证失败时也可能返回成功）
+  - 迁移用一次性服务 + `condition: service_completed_successfully`，并设 `restart: "no"`（一次性任务失败就该停下来让人看见，否则会陷入「失败 → 重启 → 再失败」的无限循环刷爆日志）
+  - 应用用 `service_healthy`，避免"表还没建好就起来查询"的随机失败
+- ⚠️ **一次性数据库初始化不要放 `/docker-entrypoint-initdb.d`**：它**只在数据卷为空时执行一次**，之后改配置永远不会重跑——会变成"明明加了配置却还是 Access denied"的谜题。改用一次性服务或幂等脚本
+- ⚠️ compose **只转发它明确列出的环境变量**：光写进 `.env` 而没在 `environment:` 里列出的变量，容器里根本看不到。`$$` 才是容器内的字面 `$`（`$` 会被 compose 提前吃掉），健康检查里传 shell 变量时必须用 `$$`
 
 ---
 
@@ -554,9 +578,10 @@ lint → build → test（单测+集成）→ 覆盖率卡点 → 镜像构建�
 | 启动接口 | `dotnet run --project src/YourProject.Api` |
 | 单元/集成测试 | `dotnet test` |
 | 新增迁移 | `dotnet ef migrations add <Name> --project src/YourProject.Infrastructure --startup-project src/YourProject.Api` |
-| 格式检查 | `dotnet format` |
+| 格式检查 | `dotnet format`（**进到各项目目录**执行，见下方说明） |
 
 > 项目名/目录名以实际仓库为准；与精简版 [CLAUDE.md](../CLAUDE.md)「一、常用命令」保持一致。
+> ⚠️ `dotnet format` **不支持 `.slnx` 工作区**：在解决方案根目录执行会打印 help 并**以退出码 0 结束**——静默通过，CI 会绿着放过未格式化的代码，比直接报错更危险。正确做法是进到各项目目录执行 `dotnet format whitespace --verify-no-changes`。另注意 `dotnet format whitespace` **不接受 `--nologo`**（会被当成文件路径）。
 > `dotnet ef` 工具版本需与 EF Core 主版本匹配（版本不匹配会报错；升级：`dotnet tool update --global dotnet-ef`）。
 
 ## 附录 C：本地 AI 权限配置
