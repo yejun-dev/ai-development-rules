@@ -27,7 +27,8 @@
 | Tailwind CSS | 4.x | 优先原子类，禁止新增独立 CSS 文件；主题配置用 CSS `@theme` |
 | shadcn-vue | 最新稳定版 | 组件源码位于 `src/components/ui`，**禁止直接修改源码** |
 | TanStack Vue Table | 8.x | 所有列表页必须使用，禁止手写原生表格逻辑 |
-| Zod + vee-validate（@vee-validate/zod） | 最新版 | 所有表单必须定义 Schema，与后端 DTO 校验规则对齐 |
+| Zod | **3.25.x（锁 3.x）** | ⚠️ **禁止 4.x**：`@vee-validate/zod` 的 peerDependency 是 `zod: ^3.24.0`，装 4.x 直接解析失败 |
+| vee-validate + @vee-validate/zod | 4.15.x | 所有表单必须定义 Schema，与后端 DTO 校验规则对齐 |
 | Axios | 1.x | 必须使用全局封装实例，禁止直接调用原生 axios |
 | Pinia | 4.x | 管理用户信息、权限、全局配置 |
 | Vue Router | 4.x | 全局前置守卫统一做登录校验、权限校验 |
@@ -36,6 +37,8 @@
 | unplugin-vue-components | 最新版 | Vite「自动导入」依赖插件：组件按需导入（含 shadcn-vue 组件） |
 | Node.js | 24 LTS | 本地与 Docker 构建统一版本（Vite 8 要求 ≥20.19 / ≥22.12） |
 | ESLint + Prettier | 10.x / 3.x | 统一代码风格与静态检查（CI lint 步骤）；配置随仓库提交 |
+
+> ⚠️ **本表的"最新版"≠ npm 上的 latest**：好几个库的 latest 已经跨了大版本（vue-router 现在是 5.x、TypeScript 是 7.x、TanStack Table 是 9.x），`npm install <包名>` 装到的**不是规范要的版本**。**新增依赖必须按本表锁版本**（如 `npm install vue-router@^4.6`），拿不准时先 `npm view <包名> versions` 确认。
 
 ### 2.2 后端
 
@@ -76,6 +79,7 @@ src/
 ├── composables/          # 组合式函数（useXxx）
 ├── directives/           # 自定义指令（v-auth 权限指令等）
 ├── layouts/              # 全局布局组件
+├── lib/utils.ts          # shadcn-vue CLI 生成的 cn() 助手，与其组件一并视为只读
 ├── router/index.ts       # 路由配置 + 全局权限守卫
 ├── stores/               # Pinia 状态管理，按领域分文件
 ├── types/                # TS 类型定义，与后端 DTO 一一对应
@@ -118,7 +122,13 @@ src/
 - 所有接口必须调用 `@/utils/request` 导出的 `request` 实例，接口函数统一在 `api/` 目录定义
 - 入参、出参必须声明明确类型，禁止组件内直接写 axios 调用
 - `/api` 前缀由 request 实例的 baseURL 统一携带，`api/` 目录函数内路径不再重复 `/api`（如 `get('/v1/users')`），避免出现 `/api/api`
-- **token 无感刷新**：响应拦截器捕获 401 → 调 refresh 接口换新（refresh token 走 Cookie，请求 `withCredentials`）→ 重放原请求；刷新期间的并发请求必须进入队列等待，refresh 失效才跳转登录页
+- **判断请求成败看 `ApiResult.code`，不看 HTTP 状态码**：业务异常（`code ≥ 1000`）返回的是 **HTTP 200**（见 6.4），只看状态码会把业务失败当成功
+- **token 无感刷新**：响应拦截器捕获 401 → 调 refresh 接口换新（refresh token 走 Cookie，请求 `withCredentials`）→ 重放原请求；refresh 失效才跳转登录页。以下几点缺一个都会出故障：
+  - **并发刷新必须去重**：把在途的刷新 Promise 存下来，其余 401 复用它排队等待。**这不是性能优化**——refresh token 是**一次性轮换**的，并发刷新会让后发的那个拿着已作废的令牌去请求，服务端判定「凭证复用」，**注销该用户全部会话，用户被直接踢下线**
+  - 请求上打 `_retry` 标记，**每条请求只重放一次**；不加会「401 → 刷新 → 仍 401 → 再刷新」无限循环
+  - 刷新请求必须用**不带拦截器的裸 axios 实例**发送；复用主实例会让刷新失败的 401 再次进入同一个拦截器，形成递归
+  - 刷新成功后重放必须走**带请求拦截器的封装实例**（不能直接用 axios），否则读不到刚更新的访问令牌，重放会立刻再 401
+  - ⚠️ 因为业务异常按 6.4 返回 **HTTP 200**，刷新接口失败（`code 1203/1204`）**不会**进入 axios 的错误分支——刷新函数里**必须自己判 `response.data.code`**，这是唯一的防线
 
 ### 3.5 路由与权限
 
@@ -192,6 +202,9 @@ public class ApiResult<T>
 - 高频筛选、排序字段必须配置索引（`OnModelCreating` 中定义）
 - 分页查询统一封装，返回 `PageResult<T>`（结构见 6.3）
 - 事务在业务层控制，禁止在控制器中使用事务
+- **唯一性校验必须 `IgnoreQueryFilters()`**：唯一索引建在**物理列**上，逻辑删除并不会释放唯一性。不加这句，被软删除的记录在业务层"查不到"，校验放行 → 数据库报重复键 → 用户看到莫名其妙的 500。**改唯一索引前先想清楚"删掉的数据还算不算占用"**，两条路选一条并写进注释：①唯一索引带上 `IsDeleted`（部分索引，MySQL 不支持；改用 `IsDeleted` 参与的组合唯一列）②校验时 `IgnoreQueryFilters()`
+- **禁止无脑 `Update(entity)`**：它把实体的**全部字段**标记为已修改，审计日志会退化成"所有字段都变了"，也掩盖了并发修改。先按 Id 查出实体、逐字段赋值、只调用 `SaveChangesAsync()`
+- ⚠️ **`ExecuteUpdateAsync` / `ExecuteDeleteAsync` 绕过变更跟踪与拦截器**：不走 `SaveChanges` 的批量操作，审计拦截器**不会被触发**。用于批量改状态时必须**显式补写审计日志**；`SaveChanges` 之外的一切写库路径都要过一遍这个检查
 
 ### 4.5 控制器与依赖注入
 
@@ -225,6 +238,7 @@ public class ApiResult<T>
 - WHERE、排序、关联字段必须建索引；联合索引遵循最左前缀
 - 大字符串字段不建普通索引，必要时用前缀索引
 - 单表索引一般 ≤5 个；大数据量表按查询频率评估，不设死上限
+- ⚠️ **唯一索引与逻辑删除会打架**：唯一索引建在物理列上，逻辑删除**不释放唯一性**——用户名 `alice` 被软删除后，再建一个 `alice` 会直接撞数据库唯一键。设计时就选好：①唯一索引改成 `(UserName, IsDeleted)` 这类组合列并约定删除时的占位值（`IsDeleted` 是 bool 时简单加进去不够用，通常配套一个 `DeletedAt` 时间戳列）②接受"删掉的用户名不再可用"。**无论选哪条，查询侧的唯一性校验都要 `IgnoreQueryFilters()`**（见 4.4），否则"校验说没冲突、数据库说冲突"
 
 ### 5.4 迁移
 
@@ -250,6 +264,8 @@ public class ApiResult<T>
 | pageSize | int | 是 | 每页条数，上限 100（超出按 100 处理） |
 | sortField | string | 否 | 排序字段名 |
 | sortOrder | string | 否 | `asc` / `desc` |
+
+> ⚠️ **前后端页码基准不同**：TanStack Table 的 `pageIndex` **从 0 开始**，本接口的 `pageIndex` **从 1 开始**。转换必须**收敛在一处**（composable 或 api 层，通常是"请求时 `+1`、回填时 `-1`"），**禁止在组件里零散地 ±1**——否则必然出现"第 2 页显示的是第 1 页数据"这类只在特定页才暴露的错位。测试用例要显式覆盖 `pageIndex` 0 与 1 的边界。
 
 ### 6.3 通用分页响应与统一响应结构
 
@@ -452,11 +468,16 @@ lint → build → test（单测+集成）→ 覆盖率卡点 → 镜像构建�
 - 前端：多阶段构建（node:24-alpine 构建 → **`nginx:alpine-slim`** 托管），最终镜像 ≤ 50MB，Nginx 同时处理静态资源与 `/api` 反代
   - **必须用 `-slim` 变体**：实测 `nginx:alpine` **103MB**、`nginx:alpine-slim` **30MB**。用 `alpine` 永远达不到 50MB 预算——多出来的是 geoip / xslt / perl / image-filter 等静态托管与反代一个都用不上的可选模块
   - 体积以 `docker image ls`（**解压后**）为准：Docker Hub 页面标的是**压缩后**体积，两者能差一倍以上，做预算别抄页面上的数字
+  - **SPA 托管的三个必备配置**（缺一条都出事）：
+    - `try_files $uri $uri/ /index.html;`：前端路由是**客户端路由**，直接访问或刷新 `/system/users` 时服务端并没有这个文件，不退回到 `index.html` 就是 **404**
+    - `index.html` 必须 `Cache-Control: no-store`：它是唯一**不带内容哈希**的文件，被缓存住就会出现"发版后用户看到的还是旧版"——而旧的 `index.html` 会去引用已经被删掉的旧哈希资源，表现为**白屏**（这是发版后白屏最常见的原因）
+    - 带哈希的静态资源（`/assets/*`）走 `Cache-Control: public, max-age=31536000, immutable`：文件名里带着内容指纹，内容一变文件名就变，可以放心长缓存
 - 后端：多阶段构建（sdk 构建 → aspnet 镜像运行，如 `mcr.microsoft.com/dotnet/aspnet:10.0`），容器内端口 8080（.NET 8+ 官方镜像默认 `ASPNETCORE_HTTP_PORTS=8080`，可按需覆盖）
   - 运行阶段用镜像自带的非 root 用户（.NET 8+ 为 `USER app`），容器被攻破时不会直接拿到 root
   - ⚠️ **运行镜像里既没有 curl 也没有 wget**，健康检查用镜像自带的 `bash` 对 `/health` 发 `/dev/tcp` 请求；**不要为了装 curl 引入 `apt-get`**——那会让镜像构建依赖 apt 源的可达性（国内网络下经常 502），把构建卡在一个与代码毫无关系的地方
 - 构建顺序：**先拷依赖清单（`.csproj` / `package.json` + lockfile）单独还原，再拷源码**。Docker 按层缓存，依赖没变时改业务代码可命中缓存；顺序写反了，改一行代码就要重下全部依赖
 - 前端安装依赖用 `npm ci` 而非 `npm install`（严格按 lockfile，lockfile 与 package.json 不一致时直接失败）
+- ⚠️ **换行符必须锁 LF**：仓库加 `.gitattributes` 声明 `* text=auto eol=lf`（至少 `*.sh text eol=lf`）。Windows 上检出成 CRLF 的 shell 脚本、entrypoint、nginx 配置进 Linux 容器后，会报 `\r: command not found` 或配置解析失败——错误信息完全指不到"换行符"上，是典型的排查黑洞
 - 镜像构建**不跑测试**：用 `.dockerignore` 排除 `tests/`、`node_modules/`、`bin/`、`obj/`。测试是 CI 的职责，让镜像构建跑测试只会把"构建问题"和"代码问题"混在一起
 - **禁止镜像内硬编码连接串、密钥**，统一环境变量注入
 
