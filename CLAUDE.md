@@ -71,6 +71,7 @@
 - 业务校验失败抛 `BusinessException`（带错误码），由全局 ExceptionFilter 统一转换；系统异常对外只返回"系统内部错误"。
 - 入参一律用 DTO（分页参数继承 `PageQuery`）；禁止 Entity 作为接口参数。
 - EF Core：只读查询 `AsNoTracking()`；列表查询 `Select()` 投影 DTO，禁止返回 Entity；关联显式 `Include()`，禁止懒加载；字符串字段显式 `HasMaxLength()`；高频筛选/排序字段在 `OnModelCreating` 配置索引；事务在业务层，禁止控制器中使用。
+- 逻辑删除的三个连带坑：唯一性校验必须 `IgnoreQueryFilters()`（唯一索引建在物理列上，软删除不释放唯一性，否则校验放行、数据库报重复键）；禁止无脑 `Update(entity)`（会把全部字段标脏，审计退化成"所有字段都变了"）；`ExecuteUpdateAsync`/`ExecuteDeleteAsync` **绕过变更跟踪与审计拦截器**，必须显式补写审计日志。
 - 构造函数注入，禁止手动 new 服务；注册生命周期按规范（业务服务/仓储 Scoped，工具类/全局配置 Singleton）；禁止静态类存储状态。
 - 异步方法后缀 `Async`；公共方法必须有 `<summary>` 文档注释。
 

@@ -27,6 +27,7 @@
 - 后端严格分层，禁止跨层调用、禁止 Controller 直接操作 DbContext。
 - 控制器返回业务对象由全局 Filter 包装，禁止手动构造 ApiResult、禁止 try-catch 返回错误。
 - EF Core：只读查询 `AsNoTracking()`；列表 `Select()` 投影 DTO；显式 `Include()` 禁止懒加载；字符串字段显式 `HasMaxLength()`。
+- EF Core 逻辑删除的三个连带坑：唯一性校验必须 `IgnoreQueryFilters()`（唯一索引建在物理列上，软删除不释放唯一性）；禁止无脑 `Update(entity)`（会把全部字段标脏）；`ExecuteUpdateAsync`/`ExecuteDeleteAsync` **绕过变更跟踪与审计拦截器**，须显式补审计。
 - 入参一律 DTO；构造函数注入；异步方法后缀 `Async`。
 - 表结构变更必须走 EF 迁移；重要业务表（用户/角色/权限/订单/审批等核心实体）逻辑删除用 `IsDeleted`，禁止物理删除；日志表/会话表/临时表允许物理删除。
 - 业务表必含 `Id`（int 自增，审计日志等高速增长表用 bigint）、`CreateTime`、`UpdateTime`。
